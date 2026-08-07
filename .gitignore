@@ -1,0 +1,48 @@
+# =========================================================================
+# Android & Gradle
+# =========================================================================
+*.iml
+.gradle/
+/build/
+/*/build/
+/build/*
+/captures/
+.externalNativeBuild/
+.cxx/
+local.properties
+*.dex
+
+# Android Studio / IntelliJ IDEA
+.idea/
+.idea/workspace.xml
+.idea/libraries/
+.idea/modules.xml
+.idea/tasks.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+.idea/caches/
+.idea/codeStyles/
+*.iws
+*.ipr
+
+# Keystore files (CRITICAL: Never commit signing keys)
+*.jks
+*.keystore
+*.pepk
+
+# Bundletool & APK outputs
+*.apk
+*.aab
+
+# OS Generated Files
+.DS_Store
+Thumbs.db
+
+# =========================================================================
+# Native / Filament Assets & Materials (Optional)
+# =========================================================================
+# Ignores temporary shader compilation cache if using offline matc later
+*.mat.cache
+*.spirv
+
+
