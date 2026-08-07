@@ -1,11 +1,13 @@
-## AI-Assisted Architecture & Engineering Process
+## Google Filament Android Demo Suite
 
-A progressive set of Android + [Google Filament](https://github.com/google/filament) rendering samples.
+This project is a progressive set of Android + [Google Filament](https://github.com/google/filament) rendering samples.
 It was built through human-guided AI pair-programming with Gemini and Claude — from a bare triangle up through lit, textured, and procedurally-driven scenes.
 
 ## Why am I doing this?
 
 This project started as a scoped technical spike to validate whether [Filament](https://github.com/google/filament) could be reliably built with heavy AI assistance (Gemini Flash 3 + Claude Sonnet 5) before committing it as the rendering engine for a larger production app. Each sample folder tackles one additional piece of Filament's API surface, in roughly increasing order of difficulty.
+I had a good idea of what I wanted to build, but also knew that I didn't have the technical knowhow to get it done, nor the coin to hire someone to do it for me.
+I realized there would be some mistakes along the way, and figured a slight detour would prove out the tech, and build "meh" code - while refining my AI-Council process.
 
 ## Samples
 
