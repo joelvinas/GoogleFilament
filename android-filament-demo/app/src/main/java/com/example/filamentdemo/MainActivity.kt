@@ -20,6 +20,7 @@ import com.google.android.filament.View
 import com.google.android.filament.filamat.MaterialBuilder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
@@ -29,6 +30,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         init {
             Filament.init()
+            MaterialBuilder.init()
         }
     }
 
@@ -53,10 +55,6 @@ fun FilamentTriangleScreen() {
 
             override fun onPause(owner: LifecycleOwner) {
                 renderer.stopFrameCallback()
-            }
-
-            override fun onDestroy(owner: LifecycleOwner) {
-                renderer.destroy()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -101,6 +99,8 @@ class TriangleRenderer {
     private var material: Material? = null
     private var triangleEntity: Int = 0
 
+    private val rendererScope = CoroutineScope(Dispatchers.Default)
+
     private val choreographer = Choreographer.getInstance()
     private var frameCallbackActive = false
 
@@ -116,6 +116,12 @@ class TriangleRenderer {
     init {
         view.scene = scene
         view.camera = camera
+        
+        renderer.clearOptions = Renderer.ClearOptions().apply {
+            clear = true
+            clearColor = doubleArrayOf(0.1, 0.1, 0.1, 1.0)
+        }
+        
         setupGeometry()
         setupMaterialAsync()
     }
@@ -161,48 +167,44 @@ class TriangleRenderer {
 
         triangleEntity = EntityManager.get().create()
         RenderableManager.Builder(1)
+            .boundingBox(Box(0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f))
             .geometry(0, RenderableManager.PrimitiveType.TRIANGLES, vertexBuffer!!, indexBuffer!!, 0, 3)
             .culling(false)
+            .receiveShadows(false)
+            .castShadows(false)
             .build(engine, triangleEntity)
 
         scene.addEntity(triangleEntity)
     }
 
     private fun setupMaterialAsync() {
-        MaterialBuilder.init()
-        CoroutineScope(Dispatchers.Default).launch {
-            val builder = MaterialBuilder()
-                .name("TriangleMaterial")
-                .shading(MaterialBuilder.Shading.UNLIT)
-                .material(
-                    """
-                    void material(inout MaterialInputs material) {
-                        prepareMaterial(material);
-                        material.baseColor = getColor();
-                    }
-                    """.trimIndent()
-                )
-                .targetApi(MaterialBuilder.TargetApi.ALL)
-                .platform(MaterialBuilder.Platform.MOBILE)
-
-            // Rule 1: Pass engine instance into build(engine)
-            val result = builder.build(engine)
-
-            if (result.isValid) {
-                val buffer = result.getBuffer()
-                withContext(Dispatchers.Main) {
-                    material = Material.Builder()
-                        .payload(buffer, buffer.remaining())
-                        .build(engine)
-
-                    val instance = material?.defaultInstance
-                    engine.getRenderableManager().setMaterialInstanceAt(
-                        engine.getRenderableManager().getInstance(triangleEntity),
-                        0,
-                        instance!!
-                    )
+        // Run on Main thread to match the thread that created the engine
+        val builder = MaterialBuilder()
+            .name("TriangleMaterial")
+            .shading(MaterialBuilder.Shading.UNLIT)
+            .material(
+                """
+                void material(inout MaterialInputs material) {
+                    prepareMaterial(material);
+                    material.baseColor = vec4(1.0, 1.0, 1.0, 1.0);
                 }
-            }
+                """.trimIndent()
+            )
+            .targetApi(MaterialBuilder.TargetApi.ALL)
+            .platform(MaterialBuilder.Platform.MOBILE)
+
+        val result = builder.build(engine)
+
+        if (result.isValid) {
+            val buffer = result.getBuffer()
+            val materialInstance = Material.Builder()
+                .payload(buffer, buffer.remaining())
+                .build(engine)
+            material = materialInstance
+
+            val instance = materialInstance.defaultInstance
+            val rm = engine.renderableManager
+            rm.setMaterialInstanceAt(rm.getInstance(triangleEntity), 0, instance)
         }
     }
 
@@ -226,6 +228,10 @@ class TriangleRenderer {
         // Rule 3: Update viewport and recreate swapchain
         view.viewport = Viewport(0, 0, width, height)
         
+        val aspect = width.toDouble() / height.toDouble()
+        camera.setProjection(45.0, aspect, 0.1, 10.0, Camera.Fov.VERTICAL)
+        camera.lookAt(0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0)
+        
         swapChain?.let { engine.destroySwapChain(it) }
         swapChain = engine.createSwapChain(holder.surface)
     }
@@ -245,12 +251,22 @@ class TriangleRenderer {
     }
 
     fun destroy() {
+        if (triangleEntity == 0) return
+
         stopFrameCallback()
+        rendererScope.cancel()
         
         engine.destroyEntity(triangleEntity)
+        triangleEntity = 0
+
         vertexBuffer?.let { engine.destroyVertexBuffer(it) }
+        vertexBuffer = null
+
         indexBuffer?.let { engine.destroyIndexBuffer(it) }
+        indexBuffer = null
+
         material?.let { engine.destroyMaterial(it) }
+        material = null
         
         engine.destroyScene(scene)
         engine.destroyView(view)
@@ -258,6 +274,7 @@ class TriangleRenderer {
         engine.destroyCameraComponent(camera.entity)
         
         swapChain?.let { engine.destroySwapChain(it) }
+        swapChain = null
         
         engine.destroy()
     }
