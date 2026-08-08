@@ -17,8 +17,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 
+const val ZOOM_SENSITIVITY = 100.0f
 @SuppressLint("ClickableViewAccessibility")
 @Composable
+
 fun HelloCameraScreen() {
     val lifecycleOwner = LocalLifecycleOwner.current
     val renderer = remember { CameraRenderer() }
@@ -44,20 +46,24 @@ fun HelloCameraScreen() {
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { context ->
+            var isPinchingOrReleasing = false
+
             val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
                 override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+                    isPinchingOrReleasing = true
                     Log.d("HelloCamera", "onScaleBegin focusX: ${detector.focusX}, focusY: ${detector.focusY}")
                     return true
                 }
 
                 override fun onScale(detector: ScaleGestureDetector): Boolean {
+                    isPinchingOrReleasing = true
                     val factor = detector.scaleFactor
                     Log.d("HelloCamera", "onScale factor: $factor")
                     
                     // Zoom - Filament scroll: negative zooms in, positive zooms out.
                     // Pinch open (factor > 1) -> Zoom IN -> negative delta.
                     // Pinch close (factor < 1) -> Zoom OUT -> positive delta.
-                    val delta = (1.0f - factor) * 20.0f
+                    val delta = (1.0f - factor) * ZOOM_SENSITIVITY
                     renderer.onScroll(detector.focusX, detector.focusY, delta)
                     return true
                 }
@@ -69,14 +75,16 @@ fun HelloCameraScreen() {
 
             val gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
                 override fun onScroll(e1: MotionEvent?, e2: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
-                    // Orbit - ignore if pinch is in progress
-                    if (!scaleDetector.isInProgress) {
+                    // Orbit - ignore if pinch is in progress or releasing (prevents snap)
+                    if (!scaleDetector.isInProgress && !isPinchingOrReleasing) {
                         renderer.onGrabUpdate(e2.x, e2.y)
                     }
                     return true
                 }
 
                 override fun onDown(e: MotionEvent): Boolean {
+                    // Reset flag on fresh touch to allow new orbit
+                    isPinchingOrReleasing = false
                     renderer.onGrabBegin(e.x, e.y)
                     return true
                 }
@@ -85,11 +93,19 @@ fun HelloCameraScreen() {
             object : SurfaceView(context) {
                 override fun onTouchEvent(event: MotionEvent): Boolean {
                     // Pass to both detectors independently
-                    val scaleHandled = scaleDetector.onTouchEvent(event)
-                    val gestureHandled = gestureDetector.onTouchEvent(event)
+                    scaleDetector.onTouchEvent(event)
+                    gestureDetector.onTouchEvent(event)
 
-                    // Explicit grab cleanup on release
-                    if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
+                    val action = event.actionMasked
+
+                    // 1. Terminate grab immediately on pointer lift to prevent snap
+                    if (action == MotionEvent.ACTION_POINTER_UP) {
+                        isPinchingOrReleasing = true
+                        renderer.onGrabEnd()
+                    }
+
+                    // 2. Explicit grab cleanup on final release
+                    if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
                         renderer.onGrabEnd()
                     }
                     return true
