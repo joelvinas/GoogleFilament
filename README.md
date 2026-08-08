@@ -3,6 +3,8 @@
 This project is a progressive set of Android + [Google Filament](https://github.com/google/filament) rendering samples.
 It was built through human-guided AI pair-programming with Gemini and Claude — from a bare triangle up through lit, textured, and procedurally-driven scenes.
 
+<!-- TODO: add a screenshot or short GIF here of the most visually interesting sample (lit-cube or procedural-effect are probably the best candidates). This is the single highest-impact addition to this README. -->
+
 ## Why am I doing this?
 
 This project started as a scoped technical spike to validate whether [Filament](https://github.com/google/filament) could be reliably built with heavy AI assistance (Gemini Flash 3 + Claude Sonnet 5) before committing it as the rendering engine for a larger production app. Each sample folder tackles one additional piece of Filament's API surface, in roughly increasing order of difficulty.
@@ -43,19 +45,62 @@ Each sample is a self-contained Gradle module — open the specific `sample-*` f
 A few non-obvious things that came out of building these, which cost real debugging time the first time around:
 
 - **`MaterialBuilder.build()` has a real threading contract, not just a "keep it off the main thread" guideline.** It must either be called with the shared `Engine` passed in as the job-system provider, or invoked from a thread that isn't also making other Filament API calls. Wrapping the call in a coroutine isn't sufficient on its own if that contract isn't honored.
-- **Lifecycle handling needs three states, not two.** It's not just "start rendering / stop rendering and clean up" — the frame callback (`Choreographer.postFrameCallback`) needs to be removed on pause and re-added on resume, separately from full resource teardown on destroy. Skipping the pause/resume step means the app keeps trying to render into a backgrounded surface.
-- **Device rotation needs an explicit resize handler.** The swap chain and the Filament `View`'s viewport need to be updated to match the `SurfaceView`'s new dimensions on rotation — otherwise you get a stretched or frozen frame rather than a crash, which is easy to mistake for "it works."
+- **Three-State Lifecycle:** Rendering needs three explicit states (Resume, Pause, Destroy). The `Choreographer.postFrameCallback` needs to be removed on pause and re-added on resume, separately from full resource teardown on destroy to prevent background rendering into inactive surfaces.
+- **Explicit Surface Resize:** Device rotation requires explicit updates to the swap chain and the Filament `View` viewport to match new `SurfaceView` dimensions. Without this, frames stretch or freeze silently instead of crashing.
 - **Runtime material compilation (`filamat-android`) over the offline `matc` pipeline** was a deliberate choice for this spike: it removes an entire native-toolchain/Gradle-build-step integration from the validation, keeping everything in pure Kotlin — which matters when most of the code is being generated through an AI coding assistant rather than hand-written. The trade-off is a larger APK (the shader compiler ships inside the app); worth revisiting `matc` for a shipping build later.
 - **Left the default Gradle ABI configuration untouched** (no explicit `abiFilters`) — restricting it is a release-size optimization, not something that needs solving during a toolchain validation spike.
 
-## How this was built
+### Known Gaps & Technical Debt
+- **Offline Material Compilation (`matc`):** Using runtime `filamat-android` compilation is an intentional spike shortcut; a production release should migrate to offline `matc` to minimize binary footprint.
+- **ABI Filtering:** Left default Gradle ABI configurations untouched (`abiFilters` omitted). Restricting ABIs remains a future release-size optimization.
+- **Hello Triangle Rotation Alignment:** `HelloTriangleScreen` still uses an earlier "tear down on rotation" pattern and needs retrofitting to match the in-place `configChanges` surface resize pattern validated in `HelloCamera`.
++ - **Mid-Drag Rotation Test Coverage:** Rotating the device mid-gesture is manually verified as non-crashing, but automated coverage was deliberately deferred — either an instrumented `androidTest` simulating the interrupted touch sequence, or extracting the grab-state transitions into a plain, unit-testable state machine. Decision not yet made.
 
-This project demonstrates human-guided AI engineering using Gemini and Claude to work through native C++/JNI boundaries, Jetpack Compose lifecycle bindings, and Filament's graphics engine constraints.
+### Progress & Completed Artifacts
+- ✅ `01-hello-triangle`: Unlit triangle setup.
+- ✅ `02-main-page-navigation`: Compose NavHost routing.
+- ✅ `03-hello-camera`: 3D pyramid, camera `Manipulator`, orbit/zoom gestures, off-thread material compilation, and pinch-snap fixes
 
-To see the raw iterative technical decisions, refer to the archived logs, timestamped by when the work happened:
+## Development Workflow: The "AI Council" Architecture
 
-- 📋 **[Implementation Plans](./artifacts/plans)** — Pre-generation technical specs, constraints, and architecture rules.
-- 🛠️ **[Walkthroughs](./artifacts/walkthroughs)** — Step-by-step verification, crash diagnostics (e.g. AABB frustum culling fixes), and hardware validation logs.
+This repository was engineered using a human-guided multi-agent workflow balancing specialized LLMs to tackle Filament's native C++/JNI boundaries, Jetpack Compose lifecycles, and graphics constraints. 
+
+Rather than relying on a single agent, the development followed a deliberate **triangular feedback loop**:
+
+*   **Gemini "Gem" Web (Architect / Director):** Formulates high-level meta-prompts, refines architectural constraints, synthesizes feedback, and formats structured git commits. `Gemini Flash 3.6`
+*   **Android Studio "Stu" (IDE Execution Agent):** Embedded directly in the IDE to author initial Implementation Plans and generate native Kotlin/Filament code. `Gemini Flash 3 Preview`
+*   **Claude "Sonny" Sonnet (Red-Team Auditor):** Acts as an objective reviewer to audit Stu’s implementation plans—flagging edge cases, API hallucinations, and silent lifecycle bugs. `Claude Sonnet 5 Medium`
+*   **Claude "CC" Code (Terminal Investigation Agent):** Runs supervised, scoped investigation and verification tasks directly against the repo from the terminal — e.g. tracing edge-case behavior into Filament's native source rather than assuming it from documentation. `Claude Sonnet 5`
+
+```
+              [ "Gem" ]
+          (Architect & Orchestrator)
+           ↗              ↖
+    refines plan       feeds back audit
+         ↗                      ↖
+     [ "Stu" ]    ──────→   [ "Sonny" ]
+ (IDE Executor)   audits   (Red-Team Reviewer)
+```
+**Note:** Claude Code entered the workflow later, initially for an ad-hoc scoped investigation rather than as a planned step — it's not yet formalized into the cadence above. That'll likely change as its role solidifies.
+
+### The Iteration Cycle
+
+For every new sample and non-trivial refactor, the process followed a strict 9-step cadence:
+
+1. **Prompt Strategy:** Query **Gemini Web** to craft an initial prompt tailored for Android Studio Gemini ("Stu").
+2. **Draft Plan:** **Stu** generates a detailed technical Implementation Plan directly in the IDE.
+3. **Red-Team Audit:** Feed Stu’s plan to **Claude** to identify oversights, flawed threading models, or missed surface lifecycles.
+4. **Synthesis:** Filter Claude’s feedback (separating hard requirements from noise) and instruct **Gemini Web** to draft an updated prompt.
+5. **Plan Revision:** **Stu** updates the Implementation Plan based on the refined requirements.
+6. **Double Verification:** Pass the updated plan through **Gemini Web** and **Claude** to ensure no new regressions were introduced.
+7. **Execution:** Once the plan reaches consensus, authorize **Stu** to execute code generation.
+8. **Automated Commits:** Feed the execution walkthrough to **Gemini Web** to generate clean, standard-compliant Git commit messages.
+9. **Debugging & Tech Debt:** Loop between all three models to squash runtime exceptions and document known trade-offs.
+
+To see the raw artifacts and technical decisions produced by this process:
+
+- 📋 **[Implementation Plans](./artifacts/plans)** — Pre-generation specs, architecture constraints, and red-team revisions.
+- 🛠️ **[Walkthroughs](./artifacts/walkthroughs)** — Step-by-step verification, crash diagnostics (e.g., AABB frustum culling fixes), and hardware validation logs.
 
 ## License
 
