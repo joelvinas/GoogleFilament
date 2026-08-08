@@ -9,6 +9,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.filamentdemo.ui.ComingSoonScreen
 import com.example.filamentdemo.ui.SampleListScreen
+import com.example.filamentdemo.ui.samples.HelloCameraScreen
 import com.example.filamentdemo.ui.samples.HelloTriangleScreen
 import com.google.android.filament.Filament
 import com.google.android.filament.filamat.MaterialBuilder
@@ -46,9 +47,12 @@ fun FilamentApp() {
             HelloTriangleScreen()
         }
         
+        composable("hello_camera") {
+            HelloCameraScreen()
+        }
+        
         // Placeholder routes
         val placeholders = listOf(
-            "hello_camera" to "Hello Camera",
             "lit_cube" to "Lit Cube",
             "material_builder" to "Material Builder",
             "material_stress" to "Material Instance Stress",
