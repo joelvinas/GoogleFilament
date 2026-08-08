@@ -13,12 +13,14 @@ import com.example.filamentdemo.ui.samples.HelloCameraScreen
 import com.example.filamentdemo.ui.samples.HelloTriangleScreen
 import com.google.android.filament.Filament
 import com.google.android.filament.filamat.MaterialBuilder
+import com.google.android.filament.utils.Utils
 
 class MainActivity : ComponentActivity() {
     companion object {
         init {
             Filament.init()
             MaterialBuilder.init()
+            Utils.init()
         }
     }
 
