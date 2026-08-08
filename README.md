@@ -3,7 +3,9 @@
 This project is a progressive set of Android + [Google Filament](https://github.com/google/filament) rendering samples.
 It was built through human-guided AI pair-programming with Gemini and Claude — from a bare triangle up through lit, textured, and procedurally-driven scenes.
 
-<!-- TODO: add a screenshot or short GIF here of the most visually interesting sample (lit-cube or procedural-effect are probably the best candidates). This is the single highest-impact addition to this README. -->
+<img width="1080" height="2340" alt="Filament-MainPage" src="https://github.com/user-attachments/assets/0abe0c01-e7d2-454b-8145-c0528f1567d5" />
+<img width="1080" height="2340" alt="HelloTriangle" src="https://github.com/user-attachments/assets/7638797f-54b5-4d48-a381-65eca3edcfaf" />
+
 
 ## Why am I doing this?
 
