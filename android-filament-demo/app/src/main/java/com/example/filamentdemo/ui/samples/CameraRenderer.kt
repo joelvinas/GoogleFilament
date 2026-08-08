@@ -216,6 +216,7 @@ class CameraRenderer {
     }
 
     fun onScroll(x: Float, y: Float, delta: Float) {
+        Log.d("HelloCamera", "onScroll delta: $delta")
         manipulator?.scroll(x.toInt(), y.toInt(), delta)
     }
 

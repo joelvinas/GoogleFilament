@@ -1,6 +1,7 @@
 package com.example.filamentdemo.ui.samples
 
 import android.annotation.SuppressLint
+import android.util.Log
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
@@ -44,10 +45,25 @@ fun HelloCameraScreen() {
         modifier = Modifier.fillMaxSize(),
         factory = { context ->
             val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-                override fun onScale(detector: ScaleGestureDetector): Boolean {
-                    // Zoom
-                    renderer.onScroll(detector.focusX, detector.focusY, detector.scaleFactor - 1.0f)
+                override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+                    Log.d("HelloCamera", "onScaleBegin focusX: ${detector.focusX}, focusY: ${detector.focusY}")
                     return true
+                }
+
+                override fun onScale(detector: ScaleGestureDetector): Boolean {
+                    val factor = detector.scaleFactor
+                    Log.d("HelloCamera", "onScale factor: $factor")
+                    
+                    // Zoom - Filament scroll: negative zooms in, positive zooms out.
+                    // Pinch open (factor > 1) -> Zoom IN -> negative delta.
+                    // Pinch close (factor < 1) -> Zoom OUT -> positive delta.
+                    val delta = (1.0f - factor) * 20.0f
+                    renderer.onScroll(detector.focusX, detector.focusY, delta)
+                    return true
+                }
+
+                override fun onScaleEnd(detector: ScaleGestureDetector) {
+                    Log.d("HelloCamera", "onScaleEnd")
                 }
             })
 
@@ -68,12 +84,12 @@ fun HelloCameraScreen() {
 
             object : SurfaceView(context) {
                 override fun onTouchEvent(event: MotionEvent): Boolean {
-                    // Pass to both detectors
-                    scaleDetector.onTouchEvent(event)
-                    gestureDetector.onTouchEvent(event)
+                    // Pass to both detectors independently
+                    val scaleHandled = scaleDetector.onTouchEvent(event)
+                    val gestureHandled = gestureDetector.onTouchEvent(event)
 
                     // Explicit grab cleanup on release
-                    if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
+                    if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
                         renderer.onGrabEnd()
                     }
                     return true
