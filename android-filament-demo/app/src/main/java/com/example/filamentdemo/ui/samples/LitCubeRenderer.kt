@@ -45,7 +45,7 @@ class LitCubeRenderer : OrbitGestureListener {
     }
 
     init {
-        Log.d("LitCubeRenderer", "[LitCubeRenderer] Renderer Created")
+        Log.d("FilamentLitCube", "[FilamentLitCube] Renderer Created")
         val engine = engine!!
         val view = view!!
         val scene = scene!!
@@ -182,7 +182,7 @@ class LitCubeRenderer : OrbitGestureListener {
             .build(engine, cubeEntity)
 
         scene.addEntity(cubeEntity)
-        Log.d("LitCubeRenderer", "[LitCubeRenderer] Cube Geometry Created")
+        Log.d("FilamentLitCube", "[FilamentLitCube] Cube Geometry Created")
     }
 
     private fun putVertex(buffer: ByteBuffer, x: Float, y: Float, z: Float, r: Float, g: Float, b: Float) {
@@ -212,7 +212,7 @@ class LitCubeRenderer : OrbitGestureListener {
             .build(engine)
         scene.indirectLight = indirectLight
         
-        Log.d("LitCubeRenderer", "[LitCubeRenderer] Lighting Created")
+        Log.d("FilamentLitCube", "[FilamentLitCube] Lighting Created")
     }
 
     private fun setupMaterialAsync() {
@@ -247,7 +247,7 @@ class LitCubeRenderer : OrbitGestureListener {
 
                     val rm = currentEngine.renderableManager
                     rm.setMaterialInstanceAt(rm.getInstance(cubeEntity), 0, mat.defaultInstance)
-                    Log.d("LitCubeRenderer", "[LitCubeRenderer] Material Compiled and Applied")
+                    Log.d("FilamentLitCube", "[FilamentLitCube] Material Compiled and Applied")
                 }
             }
         }
@@ -333,18 +333,22 @@ class LitCubeRenderer : OrbitGestureListener {
 
     fun destroy() {
         val engine = engine ?: return
-        Log.d("LitCubeRenderer", "[LitCubeRenderer] Renderer Destroyed")
+        Log.d("FilamentLitCube", "[FilamentLitCube] Renderer Destroyed")
         
         stopFrameCallback()
         rendererScope.cancel()
         
+        val em = EntityManager.get()
+        
         if (cubeEntity != 0) {
             engine.destroyEntity(cubeEntity)
+            em.destroy(cubeEntity)
             cubeEntity = 0
         }
         
         if (lightEntity != 0) {
             engine.destroyEntity(lightEntity)
+            em.destroy(lightEntity)
             lightEntity = 0
         }
 
@@ -369,7 +373,11 @@ class LitCubeRenderer : OrbitGestureListener {
         renderer?.let { engine.destroyRenderer(it) }
         renderer = null
 
-        camera?.let { engine.destroyCameraComponent(it.entity) }
+        camera?.let { 
+            val entity = it.entity
+            engine.destroyCameraComponent(entity) 
+            em.destroy(entity)
+        }
         camera = null
         
         swapChain?.let { engine.destroySwapChain(it) }

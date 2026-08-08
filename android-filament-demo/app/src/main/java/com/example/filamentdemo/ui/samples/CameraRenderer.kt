@@ -225,7 +225,7 @@ class CameraRenderer : OrbitGestureListener {
     }
 
     override fun onScroll(x: Float, y: Float, delta: Float) {
-        Log.d("HelloCamera", "onScroll delta: $delta")
+        Log.d("FilamentCamera", "onScroll delta: $delta")
         manipulator?.scroll(x.toInt(), y.toInt(), delta)
     }
 
@@ -261,8 +261,11 @@ class CameraRenderer : OrbitGestureListener {
         stopFrameCallback()
         rendererScope.cancel()
         
+        val em = EntityManager.get()
+
         if (pyramidEntity != 0) {
             engine.destroyEntity(pyramidEntity)
+            em.destroy(pyramidEntity)
             pyramidEntity = 0
         }
 
@@ -284,7 +287,11 @@ class CameraRenderer : OrbitGestureListener {
         renderer?.let { engine.destroyRenderer(it) }
         renderer = null
 
-        camera?.let { engine.destroyCameraComponent(it.entity) }
+        camera?.let { 
+            val entity = it.entity
+            engine.destroyCameraComponent(entity) 
+            em.destroy(entity)
+        }
         camera = null
         
         swapChain?.let { engine.destroySwapChain(it) }
