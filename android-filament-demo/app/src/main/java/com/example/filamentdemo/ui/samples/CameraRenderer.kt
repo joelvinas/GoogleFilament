@@ -7,9 +7,7 @@ import com.google.android.filament.*
 import com.google.android.filament.View
 import com.google.android.filament.filamat.MaterialBuilder
 import com.google.android.filament.utils.Manipulator
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.*
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -133,32 +131,41 @@ class CameraRenderer {
     }
 
     private fun setupMaterialAsync(engine: Engine) {
-        val builder = MaterialBuilder()
-            .name("PyramidMaterial")
-            .shading(MaterialBuilder.Shading.UNLIT)
-            .material(
-                """
-                void material(inout MaterialInputs material) {
-                    prepareMaterial(material);
-                    material.baseColor = getColor();
+        rendererScope.launch {
+            val builder = MaterialBuilder()
+                .name("PyramidMaterial")
+                .shading(MaterialBuilder.Shading.UNLIT)
+                .material(
+                    """
+                    void material(inout MaterialInputs material) {
+                        prepareMaterial(material);
+                        material.baseColor = getColor();
+                    }
+                    """.trimIndent()
+                )
+                .targetApi(MaterialBuilder.TargetApi.ALL)
+                .platform(MaterialBuilder.Platform.MOBILE)
+
+            // Compile the material payload off-thread
+            val result = withContext(Dispatchers.IO) {
+                builder.build(engine)
+            }
+
+            // Switch to Main to interface with Filament Engine and attach to Renderable
+            withContext(Dispatchers.Main) {
+                val currentEngine = this@CameraRenderer.engine
+                if (currentEngine != null && result.isValid && pyramidEntity != 0) {
+                    val buffer = result.getBuffer()
+                    val materialInstance = Material.Builder()
+                        .payload(buffer, buffer.remaining())
+                        .build(currentEngine)
+                    material = materialInstance
+
+                    val instance = materialInstance.defaultInstance
+                    val rm = currentEngine.renderableManager
+                    rm.setMaterialInstanceAt(rm.getInstance(pyramidEntity), 0, instance)
                 }
-                """.trimIndent()
-            )
-            .targetApi(MaterialBuilder.TargetApi.ALL)
-            .platform(MaterialBuilder.Platform.MOBILE)
-
-        val result = builder.build(engine)
-
-        if (result.isValid) {
-            val buffer = result.getBuffer()
-            val materialInstance = Material.Builder()
-                .payload(buffer, buffer.remaining())
-                .build(engine)
-            material = materialInstance
-
-            val instance = materialInstance.defaultInstance
-            val rm = engine.renderableManager
-            rm.setMaterialInstanceAt(rm.getInstance(pyramidEntity), 0, instance)
+            }
         }
     }
 
