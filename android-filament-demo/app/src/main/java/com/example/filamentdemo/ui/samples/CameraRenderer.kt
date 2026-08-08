@@ -7,11 +7,12 @@ import com.google.android.filament.*
 import com.google.android.filament.View
 import com.google.android.filament.filamat.MaterialBuilder
 import com.google.android.filament.utils.Manipulator
+import com.example.filamentdemo.ui.utils.OrbitGestureListener
 import kotlinx.coroutines.*
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-class CameraRenderer {
+class CameraRenderer : OrbitGestureListener {
     private var engine: Engine? = Engine.create(Engine.Backend.OPENGL)
     private var renderer: Renderer? = engine?.createRenderer()
     private var scene: Scene? = engine?.createScene()
@@ -210,19 +211,19 @@ class CameraRenderer {
         swapChain = null
     }
 
-    fun onGrabBegin(x: Float, y: Float) {
+    override fun onGrabBegin(x: Float, y: Float) {
         manipulator?.grabBegin(x.toInt(), y.toInt(), false) // strafe = false
     }
 
-    fun onGrabUpdate(x: Float, y: Float) {
+    override fun onGrabUpdate(x: Float, y: Float) {
         manipulator?.grabUpdate(x.toInt(), y.toInt())
     }
 
-    fun onGrabEnd() {
+    override fun onGrabEnd() {
         manipulator?.grabEnd()
     }
 
-    fun onScroll(x: Float, y: Float, delta: Float) {
+    override fun onScroll(x: Float, y: Float, delta: Float) {
         Log.d("HelloCamera", "onScroll delta: $delta")
         manipulator?.scroll(x.toInt(), y.toInt(), delta)
     }

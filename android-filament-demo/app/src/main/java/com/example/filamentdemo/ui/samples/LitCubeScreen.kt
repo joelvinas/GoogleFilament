@@ -1,7 +1,6 @@
 package com.example.filamentdemo.ui.samples
 
 import android.annotation.SuppressLint
-import android.util.Log
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -18,9 +17,9 @@ import com.example.filamentdemo.ui.utils.OrbitGestureHandler
 
 @SuppressLint("ClickableViewAccessibility")
 @Composable
-fun HelloCameraScreen() {
+fun LitCubeScreen() {
     val lifecycleOwner = LocalLifecycleOwner.current
-    val renderer = remember { CameraRenderer() }
+    val renderer = remember { LitCubeRenderer() }
 
     DisposableEffect(Unit) {
         val observer = object : DefaultLifecycleObserver {

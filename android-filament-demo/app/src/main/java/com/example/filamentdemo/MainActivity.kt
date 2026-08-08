@@ -11,6 +11,7 @@ import com.example.filamentdemo.ui.ComingSoonScreen
 import com.example.filamentdemo.ui.SampleListScreen
 import com.example.filamentdemo.ui.samples.HelloCameraScreen
 import com.example.filamentdemo.ui.samples.HelloTriangleScreen
+import com.example.filamentdemo.ui.samples.LitCubeScreen
 import com.google.android.filament.Filament
 import com.google.android.filament.filamat.MaterialBuilder
 import com.google.android.filament.utils.Utils
@@ -53,9 +54,12 @@ fun FilamentApp() {
             HelloCameraScreen()
         }
         
+        composable("lit_cube") {
+            LitCubeScreen()
+        }
+        
         // Placeholder routes
         val placeholders = listOf(
-            "lit_cube" to "Lit Cube",
             "material_builder" to "Material Builder",
             "material_stress" to "Material Instance Stress",
             "procedural_effect" to "Procedural Effect",
