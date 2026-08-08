@@ -56,7 +56,7 @@ A few non-obvious things that came out of building these, which cost real debugg
 - **Offline Material Compilation (`matc`):** Using runtime `filamat-android` compilation is an intentional spike shortcut; a production release should migrate to offline `matc` to minimize binary footprint.
 - **ABI Filtering:** Left default Gradle ABI configurations untouched (`abiFilters` omitted). Restricting ABIs remains a future release-size optimization.
 - **Hello Triangle Rotation Alignment:** `HelloTriangleScreen` still uses an earlier "tear down on rotation" pattern and needs retrofitting to match the in-place `configChanges` surface resize pattern validated in `HelloCamera`.
-+ - **Mid-Drag Rotation Test Coverage:** Rotating the device mid-gesture is manually verified as non-crashing, but automated coverage was deliberately deferred — either an instrumented `androidTest` simulating the interrupted touch sequence, or extracting the grab-state transitions into a plain, unit-testable state machine. Decision not yet made.
+- **Mid-Drag Rotation Test Coverage:** Rotating the device mid-gesture is manually verified as non-crashing, but automated coverage was deliberately deferred — either an instrumented `androidTest` simulating the interrupted touch sequence, or extracting the grab-state transitions into a plain, unit-testable state machine. Decision not yet made.
 
 ### Progress & Completed Artifacts
 - ✅ `01-hello-triangle`: Unlit triangle setup.
@@ -89,14 +89,14 @@ Rather than relying on a single agent, the development followed a deliberate **t
 
 For every new sample and non-trivial refactor, the process followed a strict 9-step cadence:
 
-1. **Prompt Strategy:** Query **Gemini Web** to craft an initial prompt tailored for Android Studio Gemini ("Stu").
+1. **Prompt Strategy:** Query **Gem** to craft an initial prompt tailored for Android Studio Gemini ("Stu").
 2. **Draft Plan:** **Stu** generates a detailed technical Implementation Plan directly in the IDE.
-3. **Red-Team Audit:** Feed Stu’s plan to **Claude** to identify oversights, flawed threading models, or missed surface lifecycles.
-4. **Synthesis:** Filter Claude’s feedback (separating hard requirements from noise) and instruct **Gemini Web** to draft an updated prompt.
+3. **Red-Team Audit:** Feed Stu’s plan to **Sonny** to identify oversights, flawed threading models, or missed surface lifecycles.
+4. **Synthesis:** Filter Sonny’s feedback (separating hard requirements from noise) and instruct **Gem** to draft an updated prompt.
 5. **Plan Revision:** **Stu** updates the Implementation Plan based on the refined requirements.
-6. **Double Verification:** Pass the updated plan through **Gemini Web** and **Claude** to ensure no new regressions were introduced.
+6. **Double Verification:** Pass the updated plan through **Gem** and **Sonny** to ensure no new regressions were introduced.
 7. **Execution:** Once the plan reaches consensus, authorize **Stu** to execute code generation.
-8. **Automated Commits:** Feed the execution walkthrough to **Gemini Web** to generate clean, standard-compliant Git commit messages.
+8. **Automated Commits:** Feed the execution walkthrough to **Gem** to generate clean, standard-compliant Git commit messages.
 9. **Debugging & Tech Debt:** Loop between all three models to squash runtime exceptions and document known trade-offs.
 
 To see the raw artifacts and technical decisions produced by this process:
