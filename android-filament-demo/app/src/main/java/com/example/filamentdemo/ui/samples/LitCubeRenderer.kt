@@ -72,7 +72,7 @@ class LitCubeRenderer : OrbitGestureListener {
         
         setupGeometry(engine, scene)
         setupLighting(engine, scene)
-        setupMaterialAsync(engine)
+        setupMaterialAsync()
     }
 
     private fun setupGeometry(engine: Engine, scene: Scene) {
@@ -215,7 +215,7 @@ class LitCubeRenderer : OrbitGestureListener {
         Log.d("LitCubeRenderer", "[LitCubeRenderer] Lighting Created")
     }
 
-    private fun setupMaterialAsync(engine: Engine) {
+    private fun setupMaterialAsync() {
         rendererScope.launch {
             val builder = MaterialBuilder()
                 .name("LitCubeMaterial")
@@ -233,7 +233,7 @@ class LitCubeRenderer : OrbitGestureListener {
                 .platform(MaterialBuilder.Platform.MOBILE)
 
             val result = withContext(Dispatchers.IO) {
-                builder.build(engine)
+                builder.build()
             }
 
             withContext(Dispatchers.Main) {

@@ -65,7 +65,7 @@ class CameraRenderer : OrbitGestureListener {
             .build(Manipulator.Mode.ORBIT)
         
         setupGeometry(engine, scene)
-        setupMaterialAsync(engine)
+        setupMaterialAsync()
     }
 
     private fun setupGeometry(engine: Engine, scene: Scene) {
@@ -131,16 +131,17 @@ class CameraRenderer : OrbitGestureListener {
         scene.addEntity(pyramidEntity)
     }
 
-    private fun setupMaterialAsync(engine: Engine) {
+    private fun setupMaterialAsync() {
         rendererScope.launch {
             val builder = MaterialBuilder()
                 .name("PyramidMaterial")
                 .shading(MaterialBuilder.Shading.UNLIT)
+                .require(MaterialBuilder.VertexAttribute.COLOR)
                 .material(
                     """
                     void material(inout MaterialInputs material) {
                         prepareMaterial(material);
-                        material.baseColor = getColor();
+                        material.baseColor = vec4(getColor(), 1.0);
                     }
                     """.trimIndent()
                 )
@@ -149,7 +150,7 @@ class CameraRenderer : OrbitGestureListener {
 
             // Compile the material payload off-thread
             val result = withContext(Dispatchers.IO) {
-                builder.build(engine)
+                builder.build()
             }
 
             // Switch to Main to interface with Filament Engine and attach to Renderable
