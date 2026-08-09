@@ -212,8 +212,8 @@ class CameraRenderer : OrbitGestureListener {
         swapChain = null
     }
 
-    override fun onGrabBegin(x: Float, y: Float) {
-        manipulator?.grabBegin(x.toInt(), y.toInt(), false) // strafe = false
+    override fun onGrabBegin(x: Float, y: Float, strafe: Boolean) {
+        manipulator?.grabBegin(x.toInt(), y.toInt(), strafe)
     }
 
     override fun onGrabUpdate(x: Float, y: Float) {
