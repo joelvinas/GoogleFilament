@@ -18,10 +18,6 @@
  
  ```
  
- 
- 
- 
-
  // Destroy entity IDs in global pool
  val em = EntityManager.get()
  em.destroy(cubeEntity)

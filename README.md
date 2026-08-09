@@ -58,6 +58,9 @@ A few non-obvious things that came out of building these, which cost real debugg
 - **Hello Triangle Rotation Alignment:** `HelloTriangleScreen` still uses an earlier "tear down on rotation" pattern and needs retrofitting to match the in-place `configChanges` surface resize pattern validated in `HelloCamera`.
 - **Mid-Drag Rotation Test Coverage:** Rotating the device mid-gesture is manually verified as non-crashing, but automated coverage was deliberately deferred — either an instrumented `androidTest` simulating the interrupted touch sequence, or extracting the grab-state transitions into a plain, unit-testable state machine. Decision not yet made.
 
+- **Hand-rolled Tangent Utility vs Assimp/Filament Asset Loaders:** Currently building simple unit shapes (triangle, pyramid, cube) by hand-packing vertex buffers and deriving quaternions via SurfaceOrientation. Once we move to complex glTF models (Sample 06+), we will rely on Filament's gltfio library instead of manual VertexBuffer construction.
+- **Thread Adoption Standard Locked:** Moving forward across all Filament samples, any background/off-thread MaterialBuilder invocation must use builder.build() (no-arg). Passing engine on a background Dispatcher without explicit Filament thread adoption will panic.
+
 ### Progress & Completed Artifacts
 - ✅ `01-hello-triangle`: Unlit triangle setup.
 - ✅ `02-main-page-navigation`: Compose NavHost routing.

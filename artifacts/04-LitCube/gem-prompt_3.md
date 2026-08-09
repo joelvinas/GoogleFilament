@@ -1,6 +1,6 @@
 ### Prompt for Stu (Android Studio Gemini)
 
- **Status:** Plan APPROVED! Proceed directly to code generation for **Sample 05: Lit Cube**.
+ **Status:** Plan APPROVED! Proceed directly to code generation for **Sample 03: Lit Cube**.
  **Two Micro-Adjustments for Implementation:**
  1. **Color Attribute Layout (`FLOAT4`):** Use `FLOAT4` (RGBA) for vertex color data in the `VertexBuffer` layout and `MaterialBuilder` bindings (e.g., `Attribute.COLOR` as `Type.FLOAT4` with $1.0\text{f}$ alpha per vertex) to match Filament's expected material color inputs and avoid uninitialized memory reads.
  2. **Shared Gesture Extraction:** Rather than duplicating the touch handling in `LitCubeScreen`, refactor/extract the touch dispatch and state guard from `HelloCameraScreen` into a shared composable/helper (e.g., `OrbitGestureHandler.kt` or `rememberOrbitGestureDetector`). Both `HelloCameraScreen` and `LitCubeScreen` must use this shared handler.
