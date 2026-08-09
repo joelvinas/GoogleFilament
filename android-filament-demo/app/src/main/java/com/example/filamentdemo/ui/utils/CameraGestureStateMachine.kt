@@ -19,6 +19,11 @@ enum class GestureAction {
 /**
  * Pure JVM state machine for handling camera gestures.
  * Handles Orbit (1-finger) and Pan (2-finger) transitions.
+ *
+ * NOTE: This state machine implements a strict 2-pointer tracking limit.
+ * If both tracked pointers are lifted while a 3rd (untracked) finger remains on screen,
+ * the 3rd finger is NOT promoted to tracking. A full reset (grabEnd) occurs, and
+ * the system waits for all fingers to be lifted before a new gesture can begin.
  */
 class CameraGestureStateMachine(private val listener: OrbitGestureListener) {
 
@@ -37,6 +42,13 @@ class CameraGestureStateMachine(private val listener: OrbitGestureListener) {
         const val INVALID_POINTER_ID = -1
     }
 
+    /**
+     * Processes a gesture event from the UI layer.
+     *
+     * @param action The type of gesture action (DOWN, MOVE, etc.)
+     * @param pointers The current list of all active pointers on screen.
+     * @param actionIndex The index of the pointer triggering the ACTION_POINTER_DOWN/UP event.
+     */
     fun processEvent(action: GestureAction, pointers: List<Pointer>, actionIndex: Int = 0) {
         when (action) {
             GestureAction.DOWN -> {

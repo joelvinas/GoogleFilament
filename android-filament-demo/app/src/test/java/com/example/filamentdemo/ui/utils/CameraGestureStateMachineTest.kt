@@ -104,4 +104,36 @@ class CameraGestureStateMachineTest {
         assertEquals(2, mockListener.grabBeginCount)
         assertEquals(1, mockListener.grabEndCount)
     }
+
+    @Test
+    fun testCompoundGestureSequence() {
+        val p1 = Pointer(1, 10f, 10f)
+        val p2 = Pointer(2, 30f, 30f)
+
+        // 1. Orbit Start
+        stateMachine.processEvent(GestureAction.DOWN, listOf(p1))
+        assertEquals(1, mockListener.grabBeginCount)
+        assertFalse(mockListener.lastStrafe)
+
+        // 2. Transition to Pan
+        stateMachine.processEvent(GestureAction.POINTER_DOWN, listOf(p1, p2), actionIndex = 1)
+        assertEquals(2, mockListener.grabBeginCount)
+        assertEquals(1, mockListener.grabEndCount)
+        assertTrue(mockListener.lastStrafe)
+
+        // 3. Pan Update
+        stateMachine.processEvent(GestureAction.MOVE, listOf(Pointer(1, 15f, 15f), Pointer(2, 35f, 35f)))
+        assertEquals(25f, mockListener.lastX) // Centroid of 15,15 and 35,35
+
+        // 4. Resume Orbit (Lift P2)
+        stateMachine.processEvent(GestureAction.POINTER_UP, listOf(Pointer(1, 15f, 15f), Pointer(2, 35f, 35f)), actionIndex = 1)
+        assertEquals(3, mockListener.grabBeginCount)
+        assertEquals(2, mockListener.grabEndCount)
+        assertFalse(mockListener.lastStrafe)
+        assertEquals(15f, mockListener.lastX) // Resumes at P1's location
+
+        // 5. Final Release
+        stateMachine.processEvent(GestureAction.UP, listOf(Pointer(1, 15f, 15f)))
+        assertEquals(3, mockListener.grabEndCount)
+    }
 }

@@ -26,6 +26,7 @@ class CameraRenderer : OrbitGestureListener {
     private var pyramidEntity: Int = 0
 
     private var manipulator: Manipulator? = null
+    private var lastFrameTimeNanos = -1L
 
     private val rendererScope = CoroutineScope(Dispatchers.Default)
 
@@ -181,6 +182,7 @@ class CameraRenderer : OrbitGestureListener {
     fun stopFrameCallback() {
         frameCallbackActive = false
         choreographer.removeFrameCallback(frameCallback)
+        lastFrameTimeNanos = -1L
     }
 
     fun onSurfaceCreated(holder: SurfaceHolder) {
@@ -203,6 +205,7 @@ class CameraRenderer : OrbitGestureListener {
         swapChain?.let { engine.destroySwapChain(it) }
         swapChain = engine.createSwapChain(holder.surface)
         
+        lastFrameTimeNanos = -1L
         // TODO: Retrofit HelloTriangleScreen with this in-place resize pattern
     }
 
@@ -236,6 +239,16 @@ class CameraRenderer : OrbitGestureListener {
         val swapChain = swapChain ?: return
         val camera = camera ?: return
         val manipulator = manipulator ?: return
+
+        // Calculate delta time for manipulator updates
+        if (lastFrameTimeNanos == -1L) {
+            lastFrameTimeNanos = frameTimeNanos
+            return
+        }
+        val deltaTimeSeconds = (frameTimeNanos - lastFrameTimeNanos) / 1_000_000_000f
+        lastFrameTimeNanos = frameTimeNanos
+
+        manipulator.update(deltaTimeSeconds)
 
         // Update camera from manipulator
         val eye = FloatArray(3)

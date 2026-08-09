@@ -29,6 +29,7 @@ class LitCubeRenderer : OrbitGestureListener {
     private var indirectLight: IndirectLight? = null
 
     private var manipulator: Manipulator? = null
+    private var lastFrameTimeNanos = -1L
 
     private val rendererScope = CoroutineScope(Dispatchers.Default)
 
@@ -263,6 +264,7 @@ class LitCubeRenderer : OrbitGestureListener {
     fun stopFrameCallback() {
         frameCallbackActive = false
         choreographer.removeFrameCallback(frameCallback)
+        lastFrameTimeNanos = -1L
     }
 
     fun onSurfaceCreated(holder: SurfaceHolder) {
@@ -283,6 +285,7 @@ class LitCubeRenderer : OrbitGestureListener {
         
         swapChain?.let { engine.destroySwapChain(it) }
         swapChain = engine.createSwapChain(holder.surface)
+        lastFrameTimeNanos = -1L
     }
 
     fun onSurfaceDestroyed() {
@@ -314,6 +317,15 @@ class LitCubeRenderer : OrbitGestureListener {
         val swapChain = swapChain ?: return
         val camera = camera ?: return
         val manipulator = manipulator ?: return
+
+        if (lastFrameTimeNanos == -1L) {
+            lastFrameTimeNanos = frameTimeNanos
+            return
+        }
+        val deltaTimeSeconds = (frameTimeNanos - lastFrameTimeNanos) / 1_000_000_000f
+        lastFrameTimeNanos = frameTimeNanos
+
+        manipulator.update(deltaTimeSeconds)
 
         val eye = FloatArray(3)
         val target = FloatArray(3)
