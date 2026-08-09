@@ -26,18 +26,26 @@ class OrbitGestureHandler(
 ) {
     private val stateMachine = CameraGestureStateMachine(listener)
 
+    // Set by onScale() when ScaleGestureDetector actually fires a scale change for the
+    // current onTouchEvent() call (it has its own internal threshold before firing).
+    // Read-and-reset per event so pan is only suppressed on frames where scroll() ran,
+    // not for the whole two-finger touch.
+    private var scaleFiredThisEvent = false
+
     private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScale(detector: ScaleGestureDetector): Boolean {
             val factor = detector.scaleFactor
             // Pinch open (factor > 1) -> Zoom IN -> negative delta.
             val delta = (1.0f - factor) * ZOOM_SENSITIVITY
             listener.onScroll(detector.focusX, detector.focusY, delta)
+            scaleFiredThisEvent = true
             return true
         }
     })
 
     fun onTouchEvent(event: MotionEvent): Boolean {
         // Unconditional dispatch to ScaleGestureDetector first
+        scaleFiredThisEvent = false
         scaleDetector.onTouchEvent(event)
 
         val action = event.actionMasked
@@ -64,7 +72,7 @@ class OrbitGestureHandler(
         }
 
         if (gestureAction != null) {
-            stateMachine.processEvent(gestureAction, pointers, actionIndex)
+            stateMachine.processEvent(gestureAction, pointers, actionIndex, scaleFiredThisEvent)
         }
 
         return true

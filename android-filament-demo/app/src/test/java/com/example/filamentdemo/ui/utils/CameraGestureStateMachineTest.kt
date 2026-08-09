@@ -121,8 +121,12 @@ class CameraGestureStateMachineTest {
         assertEquals(1, mockListener.grabEndCount)
         assertTrue(mockListener.lastStrafe)
 
-        // 3. Pan Update
-        stateMachine.processEvent(GestureAction.MOVE, listOf(Pointer(1, 15f, 15f), Pointer(2, 35f, 35f)))
+        // 3. Pan Update (no scale fired this event, so grabUpdate proceeds normally)
+        stateMachine.processEvent(
+            GestureAction.MOVE,
+            listOf(Pointer(1, 15f, 15f), Pointer(2, 35f, 35f)),
+            scaleFired = false
+        )
         assertEquals(25f, mockListener.lastX) // Centroid of 15,15 and 35,35
 
         // 4. Resume Orbit (Lift P2)
@@ -135,5 +139,34 @@ class CameraGestureStateMachineTest {
         // 5. Final Release
         stateMachine.processEvent(GestureAction.UP, listOf(Pointer(1, 15f, 15f)))
         assertEquals(3, mockListener.grabEndCount)
+    }
+
+    @Test
+    fun testScaleFiredSuppressesGrabUpdateDuringPan() {
+        val p1 = Pointer(1, 10f, 10f)
+        val p2 = Pointer(2, 30f, 30f)
+
+        stateMachine.processEvent(GestureAction.DOWN, listOf(p1))
+        stateMachine.processEvent(GestureAction.POINTER_DOWN, listOf(p1, p2), actionIndex = 1)
+
+        val updateCountAfterBegin = mockListener.grabUpdateCount
+
+        // Scale fired on this MOVE: onGrabUpdate must be skipped so scroll() is the only
+        // thing touching the manipulator this frame.
+        stateMachine.processEvent(
+            GestureAction.MOVE,
+            listOf(Pointer(1, 15f, 15f), Pointer(2, 35f, 35f)),
+            scaleFired = true
+        )
+        assertEquals(updateCountAfterBegin, mockListener.grabUpdateCount)
+
+        // No scale fired on this MOVE: onGrabUpdate resumes normally.
+        stateMachine.processEvent(
+            GestureAction.MOVE,
+            listOf(Pointer(1, 16f, 16f), Pointer(2, 36f, 36f)),
+            scaleFired = false
+        )
+        assertEquals(updateCountAfterBegin + 1, mockListener.grabUpdateCount)
+        assertEquals(26f, mockListener.lastX) // Centroid of 16,16 and 36,36
     }
 }

@@ -48,8 +48,12 @@ class CameraGestureStateMachine(private val listener: OrbitGestureListener) {
      * @param action The type of gesture action (DOWN, MOVE, etc.)
      * @param pointers The current list of all active pointers on screen.
      * @param actionIndex The index of the pointer triggering the ACTION_POINTER_DOWN/UP event.
+     * @param scaleFired Whether ScaleGestureDetector fired an onScale callback for this
+     *   specific event. Only consulted for MOVE: when true, scroll() already touched the
+     *   manipulator this frame, so the two-finger pan update is skipped to avoid the two
+     *   handlers fighting over the same frame.
      */
-    fun processEvent(action: GestureAction, pointers: List<Pointer>, actionIndex: Int = 0) {
+    fun processEvent(action: GestureAction, pointers: List<Pointer>, actionIndex: Int = 0, scaleFired: Boolean = false) {
         when (action) {
             GestureAction.DOWN -> {
                 val p = pointers[0]
@@ -82,9 +86,13 @@ class CameraGestureStateMachine(private val listener: OrbitGestureListener) {
             GestureAction.MOVE -> {
                 updateTrackedPositions(pointers)
                 if (isDragging) {
+                    //Two-finger drag
                     if (isStrafing && activePointerId2 != INVALID_POINTER_ID) {
-                        val (cx, cy) = getCentroid()
-                        listener.onGrabUpdate(cx, cy)
+                        if (!scaleFired) {
+                            val (cx, cy) = getCentroid()
+                            listener.onGrabUpdate(cx, cy)
+                        }
+                    // One-finger drag
                     } else if (!isStrafing && activePointerId1 != INVALID_POINTER_ID) {
                         listener.onGrabUpdate(lastX1, lastY1)
                     }
