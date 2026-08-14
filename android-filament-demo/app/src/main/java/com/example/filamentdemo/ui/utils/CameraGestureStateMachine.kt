@@ -1,7 +1,5 @@
 package com.example.filamentdemo.ui.utils
 
-import kotlin.math.abs
-
 /**
  * Data class representing a pointer (finger) on the screen.
  */
@@ -20,9 +18,20 @@ enum class GestureAction {
  * Pure JVM state machine for handling camera gestures.
  * Handles Orbit (1-finger) and Pan (2-finger) transitions.
  *
+ * Two-finger pan does NOT hold a persistent grabBegin/grabEnd session across the
+ * gesture. Filament's manipulator has no way to know the pan session is "stale" while
+ * scroll() (pinch-zoom) mutates the same camera underneath it, so a long-lived session
+ * that sits open across many MOVE events can have its centroid state corrupted or
+ * ignored by interleaved scroll() calls -- most visibly during a mechanically
+ * synchronized pinch, where the session receives almost no updates because the
+ * centroid barely moves even though the pinch distance is changing rapidly. Instead,
+ * every two-finger MOVE event opens and closes its own micro-session
+ * (grabBegin -> grabUpdate -> grabEnd) scoped to just that frame's centroid delta, so
+ * no pan session is ever left open when the next scroll() call runs.
+ *
  * NOTE: This state machine implements a strict 2-pointer tracking limit.
  * If both tracked pointers are lifted while a 3rd (untracked) finger remains on screen,
- * the 3rd finger is NOT promoted to tracking. A full reset (grabEnd) occurs, and
+ * the 3rd finger is NOT promoted to tracking. A full reset occurs, and
  * the system waits for all fingers to be lifted before a new gesture can begin.
  */
 class CameraGestureStateMachine(private val listener: OrbitGestureListener) {
@@ -35,8 +44,19 @@ class CameraGestureStateMachine(private val listener: OrbitGestureListener) {
     private var lastX2 = 0f
     private var lastY2 = 0f
 
-    private var isDragging = false
+    // True while a single-finger orbit grabBegin/grabEnd session is open.
+    private var isOrbiting = false
+
+    // True while two fingers are down (pan mode). Unlike isOrbiting, this never
+    // corresponds to an open grab session -- each MOVE event opens and closes its own.
     private var isStrafing = false
+
+    // The centroid from the previous two-finger MOVE event, used as the grabBegin
+    // anchor for this frame's micro-session. Absent on the first MOVE after the second
+    // finger lands, since there is no prior centroid to delta from yet.
+    private var hasPrevCentroid = false
+    private var prevCentroidX = 0f
+    private var prevCentroidY = 0f
 
     companion object {
         const val INVALID_POINTER_ID = -1
@@ -48,19 +68,15 @@ class CameraGestureStateMachine(private val listener: OrbitGestureListener) {
      * @param action The type of gesture action (DOWN, MOVE, etc.)
      * @param pointers The current list of all active pointers on screen.
      * @param actionIndex The index of the pointer triggering the ACTION_POINTER_DOWN/UP event.
-     * @param scaleFired Whether ScaleGestureDetector fired an onScale callback for this
-     *   specific event. Only consulted for MOVE: when true, scroll() already touched the
-     *   manipulator this frame, so the two-finger pan update is skipped to avoid the two
-     *   handlers fighting over the same frame.
      */
-    fun processEvent(action: GestureAction, pointers: List<Pointer>, actionIndex: Int = 0, scaleFired: Boolean = false) {
+    fun processEvent(action: GestureAction, pointers: List<Pointer>, actionIndex: Int = 0) {
         when (action) {
             GestureAction.DOWN -> {
                 val p = pointers[0]
                 activePointerId1 = p.id
                 lastX1 = p.x
                 lastY1 = p.y
-                isDragging = true
+                isOrbiting = true
                 isStrafing = false
                 listener.onGrabBegin(p.x, p.y, false)
             }
@@ -69,56 +85,57 @@ class CameraGestureStateMachine(private val listener: OrbitGestureListener) {
                     // Transition to 2-finger Pan
                     val p2 = pointers[actionIndex]
                     activePointerId2 = p2.id
-                    
+
                     // Update tracked positions for both pointers
                     updateTrackedPositions(pointers)
 
-                    if (isDragging) {
+                    if (isOrbiting) {
                         listener.onGrabEnd()
+                        isOrbiting = false
                     }
 
-                    val (cx, cy) = getCentroid()
-                    isDragging = true
+                    // No grabBegin here: the pan session is opened per-MOVE, and there's
+                    // no prior centroid yet to anchor a micro-session against.
                     isStrafing = true
-                    listener.onGrabBegin(cx, cy, true)
+                    hasPrevCentroid = false
                 }
             }
             GestureAction.MOVE -> {
                 updateTrackedPositions(pointers)
-                if (isDragging) {
-                    //Two-finger drag
-                    if (isStrafing && activePointerId2 != INVALID_POINTER_ID) {
-                        if (!scaleFired) {
-                            val (cx, cy) = getCentroid()
-                            listener.onGrabUpdate(cx, cy)
-                        }
-                    // One-finger drag
-                    } else if (!isStrafing && activePointerId1 != INVALID_POINTER_ID) {
-                        listener.onGrabUpdate(lastX1, lastY1)
+                if (isStrafing && activePointerId2 != INVALID_POINTER_ID) {
+                    val (cx, cy) = getCentroid()
+                    if (hasPrevCentroid) {
+                        listener.onGrabBegin(prevCentroidX, prevCentroidY, true)
+                        listener.onGrabUpdate(cx, cy)
+                        listener.onGrabEnd()
                     }
+                    prevCentroidX = cx
+                    prevCentroidY = cy
+                    hasPrevCentroid = true
+                } else if (isOrbiting && !isStrafing && activePointerId1 != INVALID_POINTER_ID) {
+                    listener.onGrabUpdate(lastX1, lastY1)
                 }
             }
             GestureAction.POINTER_UP -> {
                 val liftingId = pointers[actionIndex].id
                 if (liftingId == activePointerId1 || liftingId == activePointerId2) {
-                    if (isDragging) {
-                        listener.onGrabEnd()
-                    }
+                    // No pan session to close here -- each MOVE already closed its own.
+                    isStrafing = false
+                    hasPrevCentroid = false
 
                     // Identify remaining pointer
                     val remainingId = if (liftingId == activePointerId1) activePointerId2 else activePointerId1
-                    
+
                     if (remainingId != INVALID_POINTER_ID) {
                         activePointerId1 = remainingId
                         activePointerId2 = INVALID_POINTER_ID
-                        
+
                         // Update the remaining pointer's position from the current list
                         val p = pointers.find { it.id == remainingId }
                         if (p != null) {
                             lastX1 = p.x
                             lastY1 = p.y
-                            isStrafing = false
-                            isDragging = true
+                            isOrbiting = true
                             listener.onGrabBegin(lastX1, lastY1, false)
                         } else {
                             reset()
@@ -129,7 +146,7 @@ class CameraGestureStateMachine(private val listener: OrbitGestureListener) {
                 }
             }
             GestureAction.UP, GestureAction.CANCEL -> {
-                if (isDragging) {
+                if (isOrbiting) {
                     listener.onGrabEnd()
                 }
                 reset()
@@ -156,10 +173,11 @@ class CameraGestureStateMachine(private val listener: OrbitGestureListener) {
     private fun reset() {
         activePointerId1 = INVALID_POINTER_ID
         activePointerId2 = INVALID_POINTER_ID
-        isDragging = false
+        isOrbiting = false
         isStrafing = false
+        hasPrevCentroid = false
     }
-    
+
     // For Testing
     fun getActivePointerId1() = activePointerId1
     fun getActivePointerId2() = activePointerId2
