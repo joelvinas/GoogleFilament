@@ -118,18 +118,20 @@ class CameraGestureStateMachineTest {
             listOf(Pointer(1, 15f, 15f), Pointer(2, 35f, 35f))
         )
 
-        // Second MOVE: centroid moves to (27, 27) -- a full micro-session should fire,
-        // anchored at the previous frame's centroid and updated to this frame's centroid.
+        // Second MOVE: raw centroid moves to (27, 27), but grabUpdate receives the
+        // EMA-smoothed value (seeded at 25,25), not the raw centroid directly.
         stateMachine.processEvent(
             GestureAction.MOVE,
             listOf(Pointer(1, 17f, 17f), Pointer(2, 37f, 37f))
         )
 
+        val expectedSmoothed = 25f + CameraGestureStateMachine.CENTROID_SMOOTHING_ALPHA * (27f - 25f)
+
         assertEquals(2, mockListener.grabBeginCount) // 1 orbit begin + 1 pan micro-session begin
         assertEquals(1, mockListener.grabUpdateCount)
         assertEquals(2, mockListener.grabEndCount) // 1 orbit end (at POINTER_DOWN) + 1 pan micro-session end
         assertTrue(mockListener.lastStrafe)
-        assertEquals(27f, mockListener.lastX) // grabUpdate is the last call, at the new centroid
+        assertEquals(expectedSmoothed, mockListener.lastX, 0.0001f) // smoothed, not raw 27f
     }
 
     @Test
@@ -154,15 +156,20 @@ class CameraGestureStateMachineTest {
         val updateCountAfterFirstTriplet = mockListener.grabUpdateCount
         val endCountAfterFirstTriplet = mockListener.grabEndCount
 
+        val alpha = CameraGestureStateMachine.CENTROID_SMOOTHING_ALPHA
+        val smoothedAfterFirstTriplet = 25f + alpha * (27f - 25f)
+
         stateMachine.processEvent(
             GestureAction.MOVE,
             listOf(Pointer(1, 19f, 19f), Pointer(2, 39f, 39f))
-        ) // centroid -> (29, 29), triplet #2, independent of triplet #1
+        ) // raw centroid -> (29, 29), triplet #2, independent of triplet #1
+
+        val expectedSmoothed = smoothedAfterFirstTriplet + alpha * (29f - smoothedAfterFirstTriplet)
 
         assertEquals(beginCountAfterFirstTriplet + 1, mockListener.grabBeginCount)
         assertEquals(updateCountAfterFirstTriplet + 1, mockListener.grabUpdateCount)
         assertEquals(endCountAfterFirstTriplet + 1, mockListener.grabEndCount)
-        assertEquals(29f, mockListener.lastX)
+        assertEquals(expectedSmoothed, mockListener.lastX, 0.0001f) // smoothed, not raw 29f
     }
 
     @Test
@@ -267,7 +274,8 @@ class CameraGestureStateMachineTest {
         assertEquals(2, mockListener.grabBeginCount)
         assertEquals(1, mockListener.grabUpdateCount)
         assertEquals(2, mockListener.grabEndCount)
-        assertEquals(27f, mockListener.lastX)
+        val expectedSmoothed = 25f + CameraGestureStateMachine.CENTROID_SMOOTHING_ALPHA * (27f - 25f)
+        assertEquals(expectedSmoothed, mockListener.lastX, 0.0001f) // smoothed, not raw 27f
 
         // 5. Resume Orbit (Lift P2): no pan session left to close, just a fresh orbit begin
         stateMachine.processEvent(
@@ -283,5 +291,99 @@ class CameraGestureStateMachineTest {
         // 6. Final Release
         stateMachine.processEvent(GestureAction.UP, listOf(Pointer(1, 17f, 17f)))
         assertEquals(3, mockListener.grabEndCount)
+    }
+
+    @Test
+    fun testCentroidSmoothingConvergesGraduallyTowardStepChange() {
+        val alpha = CameraGestureStateMachine.CENTROID_SMOOTHING_ALPHA
+
+        stateMachine.processEvent(GestureAction.DOWN, listOf(Pointer(1, 0f, 0f)))
+        stateMachine.processEvent(
+            GestureAction.POINTER_DOWN,
+            listOf(Pointer(1, 0f, 0f), Pointer(2, 0f, 0f)),
+            actionIndex = 1
+        )
+        // Seeds the smoothed centroid at (0, 0) -- no triplet fires yet.
+        stateMachine.processEvent(
+            GestureAction.MOVE,
+            listOf(Pointer(1, 0f, 0f), Pointer(2, 0f, 0f))
+        )
+
+        // Step change: both raw pointers jump straight to (200, 200) in one frame.
+        stateMachine.processEvent(
+            GestureAction.MOVE,
+            listOf(Pointer(1, 200f, 200f), Pointer(2, 200f, 200f))
+        )
+        val afterFirstStep = mockListener.lastX
+        val expectedAfterFirstStep = 0f + alpha * (200f - 0f)
+        assertEquals(expectedAfterFirstStep, afterFirstStep, 0.0001f)
+        // Must move gradually toward the step, not jump straight to the new raw value.
+        assertTrue(afterFirstStep > 0f)
+        assertTrue(afterFirstStep < 200f)
+
+        // Raw input holds steady at (200, 200); the smoothed value should keep approaching
+        // it without ever overshooting or snapping instantly.
+        stateMachine.processEvent(
+            GestureAction.MOVE,
+            listOf(Pointer(1, 200f, 200f), Pointer(2, 200f, 200f))
+        )
+        val afterSecondStep = mockListener.lastX
+        val expectedAfterSecondStep = afterFirstStep + alpha * (200f - afterFirstStep)
+        assertEquals(expectedAfterSecondStep, afterSecondStep, 0.0001f)
+        assertTrue(afterSecondStep > afterFirstStep)
+        assertTrue(afterSecondStep < 200f)
+    }
+
+    @Test
+    fun testCentroidSmoothingResetsBetweenGestures() {
+        val alpha = CameraGestureStateMachine.CENTROID_SMOOTHING_ALPHA
+
+        // First two-finger gesture: build up smoothing lag by seeding at (0, 0) then
+        // stepping to (200, 200), so the running smoothed value trails behind the raw input.
+        stateMachine.processEvent(GestureAction.DOWN, listOf(Pointer(1, 0f, 0f)))
+        stateMachine.processEvent(
+            GestureAction.POINTER_DOWN,
+            listOf(Pointer(1, 0f, 0f), Pointer(2, 0f, 0f)),
+            actionIndex = 1
+        )
+        stateMachine.processEvent(
+            GestureAction.MOVE,
+            listOf(Pointer(1, 0f, 0f), Pointer(2, 0f, 0f))
+        )
+        stateMachine.processEvent(
+            GestureAction.MOVE,
+            listOf(Pointer(1, 200f, 200f), Pointer(2, 200f, 200f))
+        )
+        assertTrue(mockListener.lastX < 200f) // confirms lag is present before ending the gesture
+
+        // End the gesture entirely (lift both fingers).
+        stateMachine.processEvent(
+            GestureAction.POINTER_UP,
+            listOf(Pointer(1, 200f, 200f), Pointer(2, 200f, 200f)),
+            actionIndex = 1
+        )
+        stateMachine.processEvent(GestureAction.UP, listOf(Pointer(1, 200f, 200f)))
+
+        // Start a brand new two-finger gesture at a completely different location with new
+        // pointer IDs. If smoothing state leaked across gestures, the first real triplet
+        // below would be pulled toward the old gesture's trailing (200,200)-ish value
+        // instead of starting fresh from this gesture's own seed.
+        stateMachine.processEvent(GestureAction.DOWN, listOf(Pointer(3, 500f, 500f)))
+        stateMachine.processEvent(
+            GestureAction.POINTER_DOWN,
+            listOf(Pointer(3, 500f, 500f), Pointer(4, 500f, 500f)),
+            actionIndex = 1
+        )
+        stateMachine.processEvent(
+            GestureAction.MOVE,
+            listOf(Pointer(3, 500f, 500f), Pointer(4, 500f, 500f))
+        ) // seeds fresh at (500, 500), no triplet
+
+        stateMachine.processEvent(
+            GestureAction.MOVE,
+            listOf(Pointer(3, 600f, 600f), Pointer(4, 600f, 600f))
+        )
+        val expectedSmoothed = 500f + alpha * (600f - 500f)
+        assertEquals(expectedSmoothed, mockListener.lastX, 0.0001f)
     }
 }
