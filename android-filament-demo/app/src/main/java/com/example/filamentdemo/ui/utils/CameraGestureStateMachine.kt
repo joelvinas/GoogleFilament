@@ -51,15 +51,36 @@ class CameraGestureStateMachine(private val listener: OrbitGestureListener) {
     // corresponds to an open grab session -- each MOVE event opens and closes its own.
     private var isStrafing = false
 
-    // The centroid from the previous two-finger MOVE event, used as the grabBegin
-    // anchor for this frame's micro-session. Absent on the first MOVE after the second
-    // finger lands, since there is no prior centroid to delta from yet.
+    // The EMA-smoothed centroid from the previous two-finger MOVE event, used as both the
+    // grabBegin anchor for this frame's micro-session and the previous value the next raw
+    // centroid is smoothed against. Absent on the first MOVE after the second finger lands,
+    // since there is no prior value to delta or smooth from yet -- that frame just seeds it.
     private var hasPrevCentroid = false
     private var prevCentroidX = 0f
     private var prevCentroidY = 0f
 
     companion object {
         const val INVALID_POINTER_ID = -1
+
+        // EMA smoothing applied to the two-finger pan centroid before it drives grabUpdate:
+        //   smoothed = smoothed + alpha * (raw - smoothed)
+        // Raw touchscreen digitizer output carries real frame-to-frame position noise
+        // (confirmed via on-device logging -- see docs/pan-jitter-investigation writeup),
+        // most visible when the two touch points are close together. The plain centroid
+        // average has no temporal filtering, so that noise reached grabUpdate at full
+        // strength. Pinch-zoom is unaffected by this: it goes through Android's
+        // ScaleGestureDetector, which already applies its own internal smoothing, so its
+        // path is deliberately left untouched.
+        //
+        // Lower alpha = more smoothing (less jitter, more lag). Higher alpha = less
+        // smoothing (more responsive, more jitter). This is a feel tradeoff, not a single
+        // correct value -- swap which constant CENTROID_SMOOTHING_ALPHA points to and test
+        // on-device against: close-fingers pan (should be smooth), normal-separation pan
+        // (should stay responsive), pinch-zoom (must be unaffected, it doesn't use this).
+        const val CENTROID_SMOOTHING_ALPHA_LIGHT = 0.5f
+        const val CENTROID_SMOOTHING_ALPHA_MEDIUM = 0.3f
+        const val CENTROID_SMOOTHING_ALPHA_HEAVY = 0.15f
+        const val CENTROID_SMOOTHING_ALPHA = CENTROID_SMOOTHING_ALPHA_HEAVY
     }
 
     /**
@@ -103,14 +124,23 @@ class CameraGestureStateMachine(private val listener: OrbitGestureListener) {
             GestureAction.MOVE -> {
                 updateTrackedPositions(pointers)
                 if (isStrafing && activePointerId2 != INVALID_POINTER_ID) {
-                    val (cx, cy) = getCentroid()
+                    val (rawX, rawY) = getCentroid()
+                    val smoothX: Float
+                    val smoothY: Float
                     if (hasPrevCentroid) {
+                        smoothX = prevCentroidX + CENTROID_SMOOTHING_ALPHA * (rawX - prevCentroidX)
+                        smoothY = prevCentroidY + CENTROID_SMOOTHING_ALPHA * (rawY - prevCentroidY)
                         listener.onGrabBegin(prevCentroidX, prevCentroidY, true)
-                        listener.onGrabUpdate(cx, cy)
+                        listener.onGrabUpdate(smoothX, smoothY)
                         listener.onGrabEnd()
+                    } else {
+                        // First MOVE after the second finger lands: nothing to smooth
+                        // against yet, so seed with the raw centroid.
+                        smoothX = rawX
+                        smoothY = rawY
                     }
-                    prevCentroidX = cx
-                    prevCentroidY = cy
+                    prevCentroidX = smoothX
+                    prevCentroidY = smoothY
                     hasPrevCentroid = true
                 } else if (isOrbiting && !isStrafing && activePointerId1 != INVALID_POINTER_ID) {
                     listener.onGrabUpdate(lastX1, lastY1)
