@@ -51,12 +51,17 @@ A few non-obvious things that came out of building these, which cost real debugg
 - **Explicit Surface Resize:** Device rotation requires explicit updates to the swap chain and the Filament `View` viewport to match new `SurfaceView` dimensions. Without this, frames stretch or freeze silently instead of crashing.
 - **Runtime material compilation (`filamat-android`) over the offline `matc` pipeline** was a deliberate choice for this spike: it removes an entire native-toolchain/Gradle-build-step integration from the validation, keeping everything in pure Kotlin — which matters when most of the code is being generated through an AI coding assistant rather than hand-written. The trade-off is a larger APK (the shader compiler ships inside the app); worth revisiting `matc` for a shipping build later.
 - **Left the default Gradle ABI configuration untouched** (no explicit `abiFilters`) — restricting it is a release-size optimization, not something that needs solving during a toolchain validation spike.
+- **`Manipulator.update(deltaTime)` must be called once per frame, before `getLookAt()`.** Missing this doesn't crash — it silently breaks `scroll()`-driven zoom while grab-driven orbit/pan keep working fine, because only zoom's effect depends on that per-frame integration tick. Easy to miss since the symptom (zoom does nothing) doesn't point at the render loop.
+- **Filament's `grabBegin`/`grabUpdate`/`grabEnd` session model is built for one continuous, single-point drag — it does not safely coexist with a concurrent `scroll()` call if held open across multiple frames.** A long-lived two-finger pan session left `scroll()`'s zoom changes vulnerable to being overwritten mid-gesture. Fix was to stop treating pan as a multi-frame session at all: open, update, and close a fresh "micro-session" every single frame, so pan behaves as statelessly as zoom already does.
+- **`Engine.destroyEntity()` / `destroyCameraComponent()` only remove Filament's components from an entity — they don't release the entity ID itself.** Without a separate `EntityManager.get().destroy(entity)` call, entity IDs leak from the global pool on every screen navigation.
+- **Raw touch input gets noisier as two contact points get closer together, and that noise doesn't average out on its own.** Android's `ScaleGestureDetector` already smooths its own span calculation, but any midpoint/centroid math we compute ourselves inherits sensor noise directly unless we explicitly filter it (EMA, in our case).
 
 ### Known Gaps & Technical Debt
 - **Offline Material Compilation (`matc`):** Using runtime `filamat-android` compilation is an intentional spike shortcut; a production release should migrate to offline `matc` to minimize binary footprint.
 - **ABI Filtering:** Left default Gradle ABI configurations untouched (`abiFilters` omitted). Restricting ABIs remains a future release-size optimization.
 - **Hello Triangle Rotation Alignment:** `HelloTriangleScreen` still uses an earlier "tear down on rotation" pattern and needs retrofitting to match the in-place `configChanges` surface resize pattern validated in `HelloCamera`.
 - **Mid-Drag Rotation Test Coverage:** Rotating the device mid-gesture is manually verified as non-crashing, but automated coverage was deliberately deferred — either an instrumented `androidTest` simulating the interrupted touch sequence, or extracting the grab-state transitions into a plain, unit-testable state machine. Decision not yet made.
+- **iOS rendering path — evaluated and deliberately deferred.** Considered SceneView (a Compose-native wrapper around Filament) as a shortcut for gesture handling. Its current multiplatform version renders iOS via RealityKit rather than Filament — adopting it would trade away the single-engine, cross-platform premise this project is built around, and complicate a scoped, fixed-cost iOS contractor port later. Staying on raw Filament on both platforms; iOS itself is out of scope for this spike and the MVP.
 
 - **Hand-rolled Tangent Utility vs Assimp/Filament Asset Loaders:** Currently building simple unit shapes (triangle, pyramid, cube) by hand-packing vertex buffers and deriving quaternions via SurfaceOrientation. Once we move to complex glTF models (Sample 06+), we will rely on Filament's gltfio library instead of manual VertexBuffer construction.
 - **Thread Adoption Standard Locked:** Moving forward across all Filament samples, any background/off-thread MaterialBuilder invocation must use builder.build() (no-arg). Passing engine on a background Dispatcher without explicit Filament thread adoption will panic.
@@ -64,7 +69,9 @@ A few non-obvious things that came out of building these, which cost real debugg
 ### Progress & Completed Artifacts
 - ✅ `01-hello-triangle`: Unlit triangle setup.
 - ✅ `02-main-page-navigation`: Compose NavHost routing.
-- ✅ `03-hello-camera`: 3D pyramid, camera `Manipulator`, orbit/zoom gestures, off-thread material compilation, and pinch-snap fixes
+- ✅ `03-hello-camera`: 3D pyramid, camera `Manipulator`, off-thread material compilation. 
+        Multi-touch gestures (orbit/pan/zoom) went through several real fix passes — an initial pinch-snap fix, a deeper redesign for seamless orbit↔pan↔zoom coexistence (persistent grab sessions don't safely coexist with concurrent `scroll()` calls), and a centroid-smoothing pass for jitter at close finger separations. Shared gesture-handling code (`OrbitGestureHandler` / `CameraGestureStateMachine`) is now common infrastructure, not per-sample.
+- ✅ `04-sample-lit-cube`: PBR-lit cube, tangent generation via SurfaceOrientation (Filament has no raw normal attribute — normals are packed into TANGENTS), off-thread material compile fix, entity-ID leak fix, standardized Logcat lifecycle tags.        
 
 ## Development Workflow: The "AI Council" Architecture
 
@@ -76,6 +83,9 @@ Rather than relying on a single agent, the development followed a deliberate **t
 *   **Android Studio "Stu" (IDE Execution Agent):** Embedded directly in the IDE to author initial Implementation Plans and generate native Kotlin/Filament code. `Gemini Flash 3 Preview`
 *   **Claude "Sonny" Sonnet (Red-Team Auditor):** Acts as an objective reviewer to audit Stu’s implementation plans—flagging edge cases, API hallucinations, and silent lifecycle bugs. `Claude Sonnet 5 Medium`
 *   **Claude "CC" Code (Terminal Investigation Agent):** Runs supervised, scoped investigation and verification tasks directly against the repo from the terminal — e.g. tracing edge-case behavior into Filament's native source rather than assuming it from documentation. `Claude Sonnet 5`
+
+**Note**: When working with Agentic systems, a confident diagnosis from any single agent in the loop should always be verified against a controlled on-device test before committing to a fix. During gesture debugging, more than one plausible-sounding root-cause analysis (including a specific claim about zoom sensitivity constants) turned out to be wrong once actually tested on hardware — the loop still converged on the right answer, but only because diagnosis and verification stayed separate steps rather than trusting either alone. "Trust, but verify."
+
 
 ```
               [ "Gem" ]
